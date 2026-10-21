@@ -3,7 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using OrgFlow.Data;
 using OrgFlow.Dto;
 using OrgFlow.Entities;
-using System.Runtime.InteropServices;
+
+
 
 namespace OrgFlow.Services
 {
@@ -33,52 +34,53 @@ namespace OrgFlow.Services
                     throw new InvalidOperationException(" Belirtilen Yönetici Bulunamadı");
 
             }
-                var employee = new Employee
-                {
-                    FirstName = employeeCreateDto.FirstName,
-                    LastName = employeeCreateDto.LastName,
-                    RegistrationNumber = employeeCreateDto.RegistrationNumber,
-                    ManagerId = employeeCreateDto.ManagerId
-                };
-                //Çalışanı EF CORE'A ekle
-                await _context.Employees.AddAsync(employee);
-                //Değişiklikleri veritabanına kaydet.
-                await _context.SaveChangesAsync();
-                return new EmployeeCreateDto
-                {
-                    FirstName = employee.FirstName,
-                    LastName = employee.LastName,
-                    RegistrationNumber = employee.RegistrationNumber,
-                    ManagerId = employee.ManagerId
-                };
+            var employee = new Employee
+            {
+                FirstName = employeeCreateDto.FirstName,
+                LastName = employeeCreateDto.LastName,
+                RegistrationNumber = employeeCreateDto.RegistrationNumber,
+                ManagerId = employeeCreateDto.ManagerId
+            };
+            //Çalışanı EF CORE'A ekle
+            await _context.Employees.AddAsync(employee);
+            //Değişiklikleri veritabanına kaydet.
+            await _context.SaveChangesAsync();
+            return new EmployeeCreateDto
+            {
+                FirstName = employee.FirstName,
+                LastName = employee.LastName,
+                RegistrationNumber = employee.RegistrationNumber,
+                ManagerId = employee.ManagerId
+            };
 
-            }
+        }
 
-        
-    
 
-          
+
+
+
 
 
         public async Task<List<EmployeeResponseDto>> GetAllAsync()
         {
-           //Veritabanındaki çalışanları getir
-           return await _context.Employees.AsNoTracking().Select(e=>new EmployeeResponseDto {
-           Id= e.Id,
-           FirstName = e.FirstName,
-           LastName= e.LastName,
-           RegistrationNumber= e.RegistrationNumber,
-           ManagerId= e.ManagerId
-           
-           
-           }).ToListAsync();
+            //Veritabanındaki çalışanları getir
+            return await _context.Employees.AsNoTracking().Select(e => new EmployeeResponseDto {
+                Id = e.Id,
+                FirstName = e.FirstName,
+                LastName = e.LastName,
+                RegistrationNumber = e.RegistrationNumber,
+                ManagerId = e.ManagerId
+
+
+            }).ToListAsync();
         }
+
 
         public async Task<EmployeeResponseDto> GetByIdAsync(int id)
         {
-          if(id<0) // id 0'dan küçük olamaz
+            if (id < 0) // id 0'dan küçük olamaz
                 throw new ArgumentOutOfRangeException("id geçersiz");
-         var employee=await  _context.Employees.FirstOrDefaultAsync(e=>e.Id==id);
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == id);
             return new EmployeeResponseDto
             {
                 Id = employee.Id,        //EmployeeResponseDto propertyleri employee bilgilerini aktarılıp ResponseDto ile döner         
@@ -91,31 +93,31 @@ namespace OrgFlow.Services
 
         public async Task<List<EmployeeHierarchyDto>> GetHierarchyAsync() //Bu kısım henüz kafamda oturmadı yarın incelenilecek
         {
-            var employees=await _context.Employees.AsNoTracking().Select(e
+            var employees = await _context.Employees.AsNoTracking().Select(e
                 => new EmployeeHierarchyDto
                 {
                     Id = e.Id,
                     FirstName = e.FirstName,
                     LastName = e.LastName,
                     ManagerId = e.ManagerId,
-                
 
-                    
+
+
 
 
                 }
-                
+
                 ).ToListAsync();
 
-          var dictionary  =employees.ToDictionary(e => e.Id); //İşçileri anahtara dönüştürüyoruz
-                                                              
-          var roots = new List<EmployeeHierarchyDto>(); //Ana yöneticileri tutacak liste
+            var dictionary = employees.ToDictionary(e => e.Id); //İşçileri anahtara dönüştürüyoruz
 
-            foreach (var employee in employees) 
+            var roots = new List<EmployeeHierarchyDto>(); //Ana yöneticileri tutacak liste
+
+            foreach (var employee in employees)
             {
                 if (employee.ManagerId.HasValue)
                 {
-                    int managerId= employee.ManagerId.Value;
+                    int managerId = employee.ManagerId.Value;
                     var manager = dictionary.TryGetValue()
                     manager.Subordinates.Add(employee);
 
@@ -130,7 +132,7 @@ namespace OrgFlow.Services
             _context.SaveChangesAsync();
 
             return roots;
-            
+
         }
 
         public async Task<EmployeUpdateDto> UpdateAsync(int employeId, EmployeUpdateDto employeUpdateDto)
@@ -145,19 +147,19 @@ namespace OrgFlow.Services
             employee.FirstName = employeUpdateDto.FirstName;
             employee.LastName = employeUpdateDto.LastName;
             employee.RegistrationNumber = employeUpdateDto.RegistrationNumber;
-            
-            _context.Employees.Add(employee);
-          
 
-           return new EmployeUpdateDto
+            _context.Employees.Add(employee);
+
+
+            return new EmployeUpdateDto
             {
-             FirstName= employeUpdateDto.FirstName,
-             LastName=employeUpdateDto.LastName,
-             RegistrationNumber= employeUpdateDto.RegistrationNumber
+                FirstName = employeUpdateDto.FirstName,
+                LastName = employeUpdateDto.LastName,
+                RegistrationNumber = employeUpdateDto.RegistrationNumber
 
 
             };
 
+
         }
-    }
-}
+    } }
