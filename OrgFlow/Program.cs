@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OrgFlow.Data;
+using OrgFlow.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,11 +12,18 @@ builder.Services.AddDbContext<AppDbContext>(options=>options.UseSqlServer(builde
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
+builder.Services.AddSwaggerGen();
+
+
+builder.Services.AddScoped<IEmployeeService, EmployeeService>(); //IEmployeeService interface'ini kullanarak EmployeeService sınıfına erişim sağlanır. Dependency Injection ile IEmployeeService interface'ini alır ve _employeeService alanına atar.
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    app.UseSwagger();
+    app.UseSwaggerUI();
     app.MapOpenApi();
 }
 

@@ -115,16 +115,17 @@ namespace OrgFlow.Services
 
             foreach (var employee in employees)
             {
-                if (employee.ManagerId.HasValue)
+                if (employee.ManagerId.HasValue)// İşçinin yönetici var mı yok mu kontrol ediyoruz
                 {
-                    int managerId = employee.ManagerId.Value;
-                    var manager = dictionary.TryGetValue()
-                    manager.Subordinates.Add(employee);
-
-
+                    int managerId = employee.ManagerId.Value;// işçinin yöneticisinin Id'sini alıyoruz
+                    var manager = dictionary.TryGetValue(managerId, out var m) ? m : null; //Yönetici varsa onu alıyoruz yoksa null döndürüyoruz  
+                    if (manager != null) // Yönetici varsa işçiyi onun altına ekliyoruz
+                    {
+                        manager.Subordinates.Add(employee);
+                    }
                 }
 
-                roots.Add(employee);
+                roots.Add(employee); // Yönetici olmayan işçileri kök listeye ekliyoruz
             }
 
 
@@ -135,27 +136,35 @@ namespace OrgFlow.Services
 
         }
 
-        public async Task<EmployeUpdateDto> UpdateAsync(int employeId, EmployeUpdateDto employeUpdateDto)
+        public async Task<EmployeeUpdateDto> UpdateAsync(int employeId, EmployeeUpdateDto employeUpdateDto)
         {
-            if (employeId < 0)
-                throw new InvalidOperationException("");
-            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeId);
+            if (employeId < 0) // id 0'dan küçük mü diye kontrol ediyoruz
+                throw new InvalidOperationException("ID geçersiz"); // ID geçersizse hata fırlatıyoruz
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeId); // ID'ye göre işçiyi buluyoruz
 
-            if (employee == null)
+            if (employee == null) // işçi bulunamazsa hata fırlatıyoruz
                 throw new InvalidOperationException("İşçi");
 
-            employee.FirstName = employeUpdateDto.FirstName;
-            employee.LastName = employeUpdateDto.LastName;
-            employee.RegistrationNumber = employeUpdateDto.RegistrationNumber;
+            employee.FirstName = employeUpdateDto.FirstName; // işçinin adını güncelliyoruz
+            employee.LastName = employeUpdateDto.LastName;// işçinin soyadını güncelliyoruz
+            employee.RegistrationNumber = employeUpdateDto.RegistrationNumber; // işçinin sicil numarasını güncelliyoruz
 
-            _context.Employees.Add(employee);
+            _context.Employees.Update(employee);
+            // Entity'yi EF Core üzerinde Modified olarak işaretler.
+            // Veritabanına henüz UPDATE sorgusu göndermez.
+            // Sadece bellekte işlem yaptığı için asenkron değildir, await kullanılmaz.
+
+            await _context.SaveChangesAsync();
+            //Veritabanına değişiklikleri kaydediyoruz
+            //İşlem sürerken metot askıya alınabilir,thread serbest kalabilir.
+            //İşlem sürerken metot askıya alınır ve diğer işlemler devam eder. await ile metot tamamlanana kadar bekleriz.
 
 
-            return new EmployeUpdateDto
+            return new EmployeeUpdateDto
             {
-                FirstName = employeUpdateDto.FirstName,
-                LastName = employeUpdateDto.LastName,
-                RegistrationNumber = employeUpdateDto.RegistrationNumber
+                FirstName = employeUpdateDto.FirstName, // işçinin adını güncelledikten sonra geri döndürüyoruz
+                LastName = employeUpdateDto.LastName, // işçinin soyadını güncelledikten sonra geri döndürüyoruz
+                RegistrationNumber = employeUpdateDto.RegistrationNumber // işçinin sicil numarasını güncelledikten sonra geri döndürüyoruz
 
 
             };

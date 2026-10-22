@@ -2,7 +2,7 @@
 
 namespace OrgFlow.Dto
 {
-    public class EmployeUpdateDto
+    public class EmployeeUpdateDto
     {
         [Required(ErrorMessage = "Ad zorunludur.")]
         public string FirstName { get; set; } = null!;
