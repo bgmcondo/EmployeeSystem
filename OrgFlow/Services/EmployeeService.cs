@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OrgFlow.Data;
 using OrgFlow.Dto;
 using OrgFlow.Entities;
+using static System.Net.WebRequestMethods;
 
 
 
@@ -16,7 +17,7 @@ namespace OrgFlow.Services
         {
             _context = context;
         }
-        public async Task<EmployeeCreateDto> CreateAsync(EmployeeCreateDto employeeCreateDto)
+        public async Task<EmployeeResponseDto> CreateAsync(EmployeeCreateDto employeeCreateDto)
         {
             //Sicil numarası daha önce kullanılmış mı?
             bool exists = await _context.Employees.AnyAsync(e => e.RegistrationNumber == employeeCreateDto.RegistrationNumber);
@@ -45,8 +46,9 @@ namespace OrgFlow.Services
             await _context.Employees.AddAsync(employee);
             //Değişiklikleri veritabanına kaydet.
             await _context.SaveChangesAsync();
-            return new EmployeeCreateDto
+            return new EmployeeResponseDto
             {
+                Id = employee.Id, //EmployeeResponseDto propertyleri employee bilgilerini aktarılıp ResponseDto ile döner
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
                 RegistrationNumber = employee.RegistrationNumber,
@@ -64,7 +66,8 @@ namespace OrgFlow.Services
         public async Task<List<EmployeeResponseDto>> GetAllAsync()
         {
             //Veritabanındaki çalışanları getir
-            return await _context.Employees.AsNoTracking().Select(e => new EmployeeResponseDto {
+            return await _context.Employees.AsNoTracking().Select(e => new EmployeeResponseDto
+            {
                 Id = e.Id,
                 FirstName = e.FirstName,
                 LastName = e.LastName,
@@ -81,12 +84,15 @@ namespace OrgFlow.Services
             if (id < 0) // id 0'dan küçük olamaz
                 throw new ArgumentOutOfRangeException("id geçersiz");
             var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == id);
+            if (employee == null)
+                throw new KeyNotFoundException("");
             return new EmployeeResponseDto
             {
                 Id = employee.Id,        //EmployeeResponseDto propertyleri employee bilgilerini aktarılıp ResponseDto ile döner         
                 FirstName = employee.FirstName,
                 LastName = employee.LastName,
-                RegistrationNumber = employee.RegistrationNumber
+                RegistrationNumber = employee.RegistrationNumber,
+                ManagerId = employee.ManagerId
 
             };
         }
@@ -113,41 +119,50 @@ namespace OrgFlow.Services
 
             var roots = new List<EmployeeHierarchyDto>(); //Ana yöneticileri tutacak liste
 
+            // Çalışanın bir yöneticisi tanımlı mı(ManagerId null değil mi) diye bakıyoruz.
+            // Tanımlıysa, bu Id'ye sahip yöneticinin dictionary'de bulunup bulunmadığını TryGetValue ile kontrol ediyoruz.
+            // TryGetValue anahtar varsa true döner ve bulunan yöneticiyi "manager" değişkenine atar;
+            // anahtar yoksa hata fırlatmaz, false döner ve manager null olur.
+            // && kısa devre yapar: ManagerId null ise ikinci koşul hiç çalışmaz, bu yüzden .Value güvenle kullanılır.
+            // Kısacası: "Yöneticisi var VE listede bulundu" ise if bloğuna girilir, çalışan yöneticinin altına eklenir.
+            // Aksi halde (yöneticisi yok ya da bulunamadı) else bloğuna düşülür ve çalışan köke eklenir.
+
             foreach (var employee in employees)
             {
-                if (employee.ManagerId.HasValue)// İşçinin yönetici var mı yok mu kontrol ediyoruz
+
+
+                if (employee.ManagerId.HasValue && dictionary.TryGetValue(employee.ManagerId.Value, out var manager))
+
                 {
-                    int managerId = employee.ManagerId.Value;// işçinin yöneticisinin Id'sini alıyoruz
-                    var manager = dictionary.TryGetValue(managerId, out var m) ? m : null; //Yönetici varsa onu alıyoruz yoksa null döndürüyoruz  
-                    if (manager != null) // Yönetici varsa işçiyi onun altına ekliyoruz
-                    {
-                        manager.Subordinates.Add(employee);
-                    }
+
+                    manager.Subordinates.Add(employee);
                 }
 
-                roots.Add(employee); // Yönetici olmayan işçileri kök listeye ekliyoruz
+                else
+                    roots.Add(employee); // Yönetici olmayan işçileri kök listeye ekliyoruz    // Yöneticisi olmayan veya yöneticisi bulunamayan çalışanları köke ekliyoruz
+
             }
 
 
 
-            _context.SaveChangesAsync();
+
 
             return roots;
 
         }
 
-        public async Task<EmployeeUpdateDto> UpdateAsync(int employeId, EmployeeUpdateDto employeUpdateDto)
+        public async Task<EmployeeResponseDto> UpdateAsync(int employeeId, EmployeeUpdateDto employeeUpdateDto)
         {
-            if (employeId < 0) // id 0'dan küçük mü diye kontrol ediyoruz
+            if (employeeId < 0) // id 0'dan küçük mü diye kontrol ediyoruz
                 throw new InvalidOperationException("ID geçersiz"); // ID geçersizse hata fırlatıyoruz
-            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeId); // ID'ye göre işçiyi buluyoruz
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeeId); // ID'ye göre işçiyi buluyoruz
 
             if (employee == null) // işçi bulunamazsa hata fırlatıyoruz
                 throw new InvalidOperationException("İşçi");
 
-            employee.FirstName = employeUpdateDto.FirstName; // işçinin adını güncelliyoruz
-            employee.LastName = employeUpdateDto.LastName;// işçinin soyadını güncelliyoruz
-            employee.RegistrationNumber = employeUpdateDto.RegistrationNumber; // işçinin sicil numarasını güncelliyoruz
+            employee.FirstName = employeeUpdateDto.FirstName; // işçinin adını güncelliyoruz
+            employee.LastName = employeeUpdateDto.LastName;// işçinin soyadını güncelliyoruz
+            employee.RegistrationNumber = employeeUpdateDto.RegistrationNumber; // işçinin sicil numarasını güncelliyoruz
 
             _context.Employees.Update(employee);
             // Entity'yi EF Core üzerinde Modified olarak işaretler.
@@ -160,15 +175,16 @@ namespace OrgFlow.Services
             //İşlem sürerken metot askıya alınır ve diğer işlemler devam eder. await ile metot tamamlanana kadar bekleriz.
 
 
-            return new EmployeeUpdateDto
+            return new EmployeeResponseDto
             {
-                FirstName = employeUpdateDto.FirstName, // işçinin adını güncelledikten sonra geri döndürüyoruz
-                LastName = employeUpdateDto.LastName, // işçinin soyadını güncelledikten sonra geri döndürüyoruz
-                RegistrationNumber = employeUpdateDto.RegistrationNumber // işçinin sicil numarasını güncelledikten sonra geri döndürüyoruz
-
-
+                Id = employee.Id,
+                FirstName = employeeUpdateDto.FirstName, // işçinin adını güncelledikten sonra geri döndürüyoruz
+                LastName = employeeUpdateDto.LastName, // işçinin soyadını güncelledikten sonra geri döndürüyoruz
+                RegistrationNumber = employeeUpdateDto.RegistrationNumber, // işçinin sicil numarasını güncelledikten sonra geri döndürüyoruz
+                ManagerId = employeeUpdateDto.ManagerId // işçinin yöneticisinin Id'sini güncelledikten sonra geri döndürüyoruz 
             };
 
 
         }
-    } }
+    }
+}

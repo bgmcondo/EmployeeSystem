@@ -10,8 +10,8 @@ namespace OrgFlow.Services
         //ID değerine göre çalışan getirir
         Task<EmployeeResponseDto> GetByIdAsync(int id);
 
-        Task<EmployeeCreateDto> CreateAsync(EmployeeCreateDto employeeCreateDto);
-        Task<EmployeeUpdateDto> UpdateAsync(int employeId,EmployeeUpdateDto employeUpdateDto);
+        Task<EmployeeResponseDto> CreateAsync(EmployeeCreateDto employeeCreateDto);
+        Task<EmployeeResponseDto> UpdateAsync(int employeeId, EmployeeUpdateDto employeeUpdateDto);
 
         Task<List<EmployeeHierarchyDto>> GetHierarchyAsync();
 
