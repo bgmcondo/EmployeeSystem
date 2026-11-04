@@ -15,6 +15,9 @@ namespace OrgFlow.Services
 
         Task<List<EmployeeHierarchyDto>> GetHierarchyAsync();
 
+        Task DeleteAsync(int employeeId);
+
+
 
     }
 }

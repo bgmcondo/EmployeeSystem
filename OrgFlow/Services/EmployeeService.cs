@@ -32,7 +32,7 @@ namespace OrgFlow.Services
                 managerExists = await _context.Employees.AnyAsync(e => e.Id == employeeCreateDto.ManagerId.Value);  //bu linq sorgusuyla ID'nin ManagerID'ye eşit olup olmadığı ölçülür 
 
                 if (!managerExists)
-                    throw new InvalidOperationException(" Belirtilen Yönetici Bulunamadı");
+                    throw new KeyNotFoundException(" Belirtilen Yönetici Bulunamadı");
 
             }
             var employee = new Employee
@@ -81,11 +81,11 @@ namespace OrgFlow.Services
 
         public async Task<EmployeeResponseDto> GetByIdAsync(int id)
         {
-            if (id < 0) // id 0'dan küçük olamaz
-                throw new ArgumentOutOfRangeException("id geçersiz");
+            if (id <= 0) // id 0'dan küçük olamaz
+                throw new ArgumentOutOfRangeException(nameof(id), "ID geçersiz");
             var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == id);
             if (employee == null)
-                throw new KeyNotFoundException("");
+                throw new KeyNotFoundException("Çalışan bulunamadı");
             return new EmployeeResponseDto
             {
                 Id = employee.Id,        //EmployeeResponseDto propertyleri employee bilgilerini aktarılıp ResponseDto ile döner         
@@ -153,26 +153,38 @@ namespace OrgFlow.Services
 
         public async Task<EmployeeResponseDto> UpdateAsync(int employeeId, EmployeeUpdateDto employeeUpdateDto)
         {
-            if (employeeId < 0) // id 0'dan küçük mü diye kontrol ediyoruz
-                throw new InvalidOperationException("ID geçersiz"); // ID geçersizse hata fırlatıyoruz
+            if (employeeId <= 0) // id 0'dan küçük mü diye kontrol ediyoruz
+                throw new ArgumentOutOfRangeException(nameof(employeeId), "ID geçersiz"); // ID geçersizse hata fırlatıyoruz
             var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeeId); // ID'ye göre işçiyi buluyoruz
 
             if (employee == null) // işçi bulunamazsa hata fırlatıyoruz
-                throw new InvalidOperationException("İşçi");
+                throw new KeyNotFoundException("İşçi bulunamadı");
+
+            if(await _context.Employees.AnyAsync(e => e.RegistrationNumber == employeeUpdateDto.RegistrationNumber && e.Id != employeeId))  
+                throw new InvalidOperationException("Sicil numarası zaten kullanılıyor");
+
+            // ---- YENİ: Yönetici kontrolleri ----
+            if (employeeUpdateDto.ManagerId.HasValue) // yönetici belirtildiyse kontrol et, null ise "yöneticisi yok" demektir
+            {
+                // 1) Çalışan kendi kendisinin yöneticisi olamaz
+                if (employeeUpdateDto.ManagerId.Value == employeeId)
+                    throw new InvalidOperationException("Çalışan kendi yöneticisi olamaz");
+
+                // 2) Belirtilen yönetici veritabanında var mı?
+                bool managerExists = await _context.Employees.AnyAsync(e => e.Id == employeeUpdateDto.ManagerId.Value);
+                if (!managerExists)
+                    throw new KeyNotFoundException("Belirtilen yönetici bulunamadı");
+            }
+            // ------------------------------------
 
             employee.FirstName = employeeUpdateDto.FirstName; // işçinin adını güncelliyoruz
             employee.LastName = employeeUpdateDto.LastName;// işçinin soyadını güncelliyoruz
             employee.RegistrationNumber = employeeUpdateDto.RegistrationNumber; // işçinin sicil numarasını güncelliyoruz
+            employee.ManagerId = employeeUpdateDto.ManagerId; // işçinin yöneticisinin Id'sini güncelliyoruz    
+                                                              // AsNoTracking() kullanmadığımız için EF Core, employee nesnesini izliyor ve değişiklikleri fark ediyor. Bu yüzden Update metodunu çağırmamıza gerek yok.
+                                                              // 
+            await _context.SaveChangesAsync(); // değişiklikleri veritabanına kaydediyoruz
 
-            _context.Employees.Update(employee);
-            // Entity'yi EF Core üzerinde Modified olarak işaretler.
-            // Veritabanına henüz UPDATE sorgusu göndermez.
-            // Sadece bellekte işlem yaptığı için asenkron değildir, await kullanılmaz.
-
-            await _context.SaveChangesAsync();
-            //Veritabanına değişiklikleri kaydediyoruz
-            //İşlem sürerken metot askıya alınabilir,thread serbest kalabilir.
-            //İşlem sürerken metot askıya alınır ve diğer işlemler devam eder. await ile metot tamamlanana kadar bekleriz.
 
 
             return new EmployeeResponseDto
@@ -186,5 +198,22 @@ namespace OrgFlow.Services
 
 
         }
+
+
+        public async Task DeleteAsync(int employeeId)
+        {
+            if (employeeId <= 0) // id 0'dan küçük mü diye kontrol ediyoruz
+                throw new  ArgumentOutOfRangeException(nameof(employeeId), "ID geçersiz"); // ID geçersizse hata fırlatıyoruz
+            var employee = await _context.Employees.FirstOrDefaultAsync(e => e.Id == employeeId); // ID'ye göre işçiyi buluyoruz
+            if (employee == null) // işçi bulunamazsa hata fırlatıyoruz
+                throw new KeyNotFoundException("İşçi bulunamadı");
+            if (await _context.Employees.AnyAsync(e => e.ManagerId == employeeId))
+                throw new InvalidOperationException("Bu çalışanın astları var, önce onları başka yöneticiye atayın");
+
+            _context.Employees.Remove(employee); // işçiyi silmek için Remove metodunu kullanıyoruz
+            await _context.SaveChangesAsync(); // değişiklikleri veritabanına kaydediyoruz
+        }
     }
+
+
 }

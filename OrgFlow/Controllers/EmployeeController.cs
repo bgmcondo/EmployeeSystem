@@ -1,62 +1,120 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using OrgFlow.Dto;
 using OrgFlow.Services;
 
 namespace OrgFlow.Controllers
-
 {
-    [ApiController] //Bu sınıfın API controller davranışını etkinleştirmek için kullanılır. Bu attribute, model doğrulama hatalarını otomatik olarak döndürür ve HTTP yanıtlarını uygun şekilde yönetir.
-
-    [Route("api/[controller]")] // Bu attribute, controller'ın hangi URL yoluna yanıt vereceğini belirtir. [controller] yer tutucu, controller sınıfının adını (Employee) temsil eder ve bu sayede URL yolu dinamik olarak oluşturulur. Örneğin, bu controller için URL yolu "api/employee" olacaktır.
-    public class EmployeeController : Controller
+    [ApiController]              // Model doğrulama hatalarını otomatik 400 olarak döner
+    [Route("api/[controller]")]  // URL: api/employee
+    public class EmployeeController : ControllerBase // API için View desteğine gerek yok
     {
-        private readonly IEmployeeService _employeeService; //IEmployeeService interface'ini kullanarak EmployeeService sınıfına erişim sağlanır.
+        private readonly IEmployeeService _employeeService;
 
-        public EmployeeController(IEmployeeService employeeService) //Dependency Injection sistemine service sınıfı enjekte edilir. Bu sayede controller sınıfı, service sınıfının metodlarını kullanabilir.
+        public EmployeeController(IEmployeeService employeeService)
         {
             _employeeService = employeeService;
         }
 
-        [HttpGet] //Get isteklerini işlemek için kullanılır. Bu attribute, bu metodun HTTP GET isteğine yanıt vereceğini belirtir.
-
-        public async Task<IActionResult> getAllEmployees() //IActionResult, HTTP yanıtlarını temsil eden bir türdür. Bu sayede metod, farklı HTTP durum kodları ve yanıt türleri döndürebilir. Task<IActionResult> ise metodun asenkron olduğunu ve IActionResult türünde bir sonuç döndüreceğini belirtir.
+        // GET api/employee
+        [HttpGet]
+        public async Task<IActionResult> GetAllEmployees()
         {
-            var employees = await _employeeService.GetAllAsync(); //EmployeeService sınıfının GetAllAsync metodunu çağırarak tüm çalışanları alır.
-            return Ok(employees); //HTTP 200 OK yanıtı ile birlikte çalışanları döndürür.   
+            var employees = await _employeeService.GetAllAsync();
+            return Ok(employees); // 200 (bu metot exception fırlatmaz, try/catch gerekmez)
         }
 
-        [HttpGet("{id}")] //Get isteklerini işlemek için kullanılır. Bu attribute, bu metodun HTTP GET isteğine yanıt vereceğini belirtir. {id} parametresi, URL yolunda bir değişken olarak tanımlanır ve metodun parametresi olarak kullanılır.
-
-        public async Task<IActionResult> GetEmployeeById(int id) //IActionResult, HTTP yanıtlarını temsil eden bir türdür. Bu sayede metod, farklı HTTP durum kodları ve yanıt türleri döndürebilir. Task<IActionResult> ise metodun asenkron olduğunu ve IActionResult türünde bir sonuç döndüreceğini belirtir.
+        // GET api/employee/5
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetEmployeeById(int id)
         {
-            var employee = await _employeeService.GetByIdAsync(id); //EmployeeService sınıfının GetByIdAsync metodunu çağırarak id parametresine göre çalışanı alır.
-            if (employee == null) //Eğer çalışan bulunamazsa
-                return NotFound(); //HTTP 404 Not Found yanıtı döndürür.
-            return Ok(employee); //HTTP 200 OK yanıtı ile birlikte çalışanı döndürür
+            try
+            {
+                var employee = await _employeeService.GetByIdAsync(id);
+                return Ok(employee); // 200
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(ex.Message); // 400 - ID geçersiz
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message); // 404 - çalışan yok
+            }
         }
 
-        [HttpGet("hierarchy")] //Get isteklerini işlemek için kullanılır. Bu attribute, bu metodun HTTP GET isteğine yanıt vereceğini belirtir. "hierarchy" parametresi, URL yolunda bir değişken olarak tanımlanır ve metodun parametresi olarak kullanılır.)]
-
-        public async Task<IActionResult> GetEmployeeHierarchy() //IActionResult, HTTP yanıtlarını temsil eden bir türdür. Bu sayede metod, farklı HTTP durum kodları ve yanıt türleri döndürebilir. Task<IActionResult> ise metodun asenkron olduğunu ve IActionResult türünde bir sonuç döndüreceğini belirtir.
+        // GET api/employee/hierarchy  ("hierarchy" sabit bir yol, değişken değil)
+        [HttpGet("hierarchy")]
+        public async Task<IActionResult> GetEmployeeHierarchy()
         {
-            var hierarchy = await _employeeService.GetHierarchyAsync(); //EmployeeService sınıfının GetHierarchyAsync metodunu çağırarak çalışanların hiyerarşisini alır.
-            return Ok(hierarchy); //HTTP 200 OK yanıtı ile birlikte çalışanların hiyerarşisini döndürür
+            var hierarchy = await _employeeService.GetHierarchyAsync();
+            return Ok(hierarchy); // 200
         }
 
-        [HttpPost] //Post isteklerini işlemek için kullanılır. Bu attribute, bu metodun HTTP POST isteğine yanıt vereceğini belirtir.
+        // POST api/employee
+        [HttpPost]
         public async Task<IActionResult> CreateEmployee([FromBody] EmployeeCreateDto employeeDto)
         {
+            try
+            {
+                var employee = await _employeeService.CreateAsync(employeeDto);
 
-           var employee = await _employeeService.CreateAsync(employeeDto); //EmployeeService sınıfının CreateAsync metodunu çağırarak yeni bir çalışan oluşturur.
-            return Ok(employee);
+                // 201 Created + Location header: api/employee/{yeniId}
+                return CreatedAtAction(nameof(GetEmployeeById), new { id = employee.Id }, employee);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message); // 404 - belirtilen yönetici yok
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message); // 409 - sicil numarası zaten kayıtlı
+            }
         }
 
-        [HttpPut("{id}")] //Put isteklerini işlemek için kullanılır. Bu attribute, bu metodun HTTP PUT isteğine yanıt vereceğini belirtir. {id} parametresi, URL yolunda bir değişken olarak tanımlanır ve metodun parametresi olarak kullanılır.
-        public async Task<IActionResult> UpdateEmployee(int id, [FromBody] EmployeeUpdateDto employeeDto) //IActionResult, HTTP yanıtlarını temsil eden bir türdür. Bu sayede metod, farklı HTTP durum kodları ve yanıt türleri döndürebilir. Task<IActionResult> ise metodun asenkron olduğunu ve IActionResult türünde bir sonuç döndüreceğini belirtir.
+        // PUT api/employee/5
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> UpdateEmployee(int id, [FromBody] EmployeeUpdateDto employeeDto)
         {
-            var employee = await _employeeService.UpdateAsync(id, employeeDto); //EmployeeService sınıfının UpdateAsync metodunu çağırarak id parametresine göre çalışanı günceller.
-            return Ok(employee);
+            try
+            {
+                var employee = await _employeeService.UpdateAsync(id, employeeDto);
+                return Ok(employee); // 200
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(ex.Message); // 400 - ID geçersiz
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message); // 404 - çalışan veya yönetici yok
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message); // 409 - sicil numarası çakışması / kendi yöneticisi olamaz
+            }
+        }
+
+        // DELETE api/employee/5
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> DeleteEmployee(int id)
+        {
+            try
+            {
+                await _employeeService.DeleteAsync(id);
+                return NoContent(); // 204
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(ex.Message); // 400 - ID geçersiz
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message); // 404 - çalışan yok
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(ex.Message); // 409 - astları var, silinemez
+            }
         }
     }
 }
